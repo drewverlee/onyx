@@ -390,7 +390,7 @@
                    [{:type :drain-commands}]
                    ;; Complete the job
                    ;; FIXME: not sure why so many iterations are required when using grouping
-                   (job-completion-cmds unique-groups jobs 3000)
+                   (job-completion-cmds unique-groups jobs 4000)
                    [{:type :drain-commands}])
         model (g/model-commands all-cmds)
         ;_ (println "Start run" (count gen-cmds))
@@ -439,6 +439,8 @@
               (simple-job-def job-id n-input-peers))
             (gen/tuple gen/uuid n-input-peers-gen)))
 
+;; Test cases to look into further
+;; target/test_check_output/testcase.2016_19_10_02-57-18.edn
 (defspec deterministic-abs-test {;:seed X 
                                  :num-tests (times 1000)}
   (for-all [uuid-seed (gen/no-shrink gen/int)
@@ -454,7 +456,7 @@
                      (gen/scale #(* 50 %) ; scale to larger command sets quicker
                                 (gen/vector 
                                  (gen/frequency [[1000 g/task-iteration-gen]
-                                                 [500 g/periodic-barrier]
+                                                 [500 g/coordinator-barrier]
                                                  [500 g/offer-barriers]
                                                  ;; These should be infrequent
                                                  [5 g/add-peer-group-gen]
@@ -468,7 +470,7 @@
                                                  [500 g/play-group-commands-gen]
                                                  [500 g/write-outbox-entries-gen]
                                                  [500 g/apply-log-entries-gen]])
-                                 10000))))]
+                                 100000))))]
            (println "Phases" (map count phases))
            (let [generated {:phases phases 
                             :messenger-type :aeron

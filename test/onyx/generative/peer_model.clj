@@ -151,10 +151,10 @@
             (gen/tuple peer-group-num-gen
                        peer-num-gen)))
 
-(def periodic-barrier 
+(def coordinator-barrier 
   (gen/fmap (fn [[g p]] 
               {:type :peer
-               :command :periodic-barrier
+               :command :coordinator-barrier
                ;; Should be one for each known peer in the group, once it's
                ;; not one peer per group
                :group-id g
@@ -256,7 +256,7 @@
   "Repeatedly plays a stanza of commands that will ensure all operations are complete"
   [random-gen groups]
   (let [commands (apply concat 
-                        (repeat 5 
+                        (repeat 50
                                 (mapcat 
                                  (fn [[g _]] 
                                    [{:type :group
@@ -305,6 +305,8 @@
           "something was written but replica versions weren't right"))
 
 (defn conj-written-segments [batches command prev-state new-state prev-replica-version]
+  (assert prev-state)
+  (assert new-state)
   (let [written (if (= command :task-iteration) 
                   (seq (:null/not-written (get-event new-state))))]  
     (assert-correct-replicas written new-state)
@@ -317,20 +319,31 @@
       written 
       (conj written))))
 
-(defn next-coordinator-state [coordinator command]
+(defn next-coordinator-state [coordinator command next-replica]
   (let [state (:coordinator-thread coordinator)]
     (if (coord/started? coordinator)
-      (assoc coordinator 
-             :coordinator-thread 
-             (onyx.peer.coordinator/coordinator-action command state (:prev-replica state)))
+      (let [prev-replica (:prev-replica state)
+            action (case command
+                     :periodic-barrier :periodic-barrier
+                     :coordinator-barrier (if (onyx.peer.coordinator/send-reallocation-barrier? coordinator prev-replica next-replica)
+                                            ;:periodic-barrier
+                                            :reallocation-barrier
+                                            :periodic-barrier)
+                     command)]
+        (assoc coordinator 
+               :coordinator-thread 
+               (onyx.peer.coordinator/coordinator-action action state next-replica)))
       coordinator)))
 
 (defn next-state [prev-state command replica]
   (cond (= command :task-iteration) 
         (tl/iteration prev-state replica)
 
-        (#{:periodic-barrier :offer-barriers} command)
-        (set-coordinator! prev-state (next-coordinator-state (get-coordinator prev-state) command))))
+        (#{:coordinator-barrier :offer-barriers :periodic-barrier} command)
+        (set-coordinator! prev-state (next-coordinator-state (get-coordinator prev-state) command replica))
+        
+        :else
+        (throw (Exception.))))
 
 (defn apply-peer-commands [groups {:keys [command group-id peer-owner-id] :as event}]
   ;(println "Apply peer command" event)
@@ -468,6 +481,7 @@
                                                               (when (coord/started? coordinator)
                                                                 (onyx.peer.coordinator/coordinator-action :shutdown state (:prev-replica state)))))
                   onyx.peer.coordinator/next-replica (fn [coordinator replica]
+                                                       (println "Would have been calling next replica!")
                                                        (if (coord/started? coordinator)
                                                          ;; store all our state in the coordinator thread key 
                                                          ;; since we've overridden start coordinator
@@ -475,7 +489,7 @@
                                                            (assoc coordinator
                                                                   :coordinator-thread 
                                                                   (onyx.peer.coordinator/coordinator-action 
-                                                                   :reallocation (:coordinator-thread coordinator) replica)))
+                                                                   :reallocation-barrier (:coordinator-thread coordinator) replica)))
                                                          coordinator))
                   ;; Make start and stop threadless / linearizable
                   ;; Try to get rid of the component atom here

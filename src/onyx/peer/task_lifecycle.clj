@@ -262,9 +262,7 @@
 (defn recover-stored-checkpoint
   [{:keys [log job-id task-id slot-id] :as event} checkpoint-type recover]
   ;(println "Read checkpoints" (extensions/read-checkpoints log job-id))
-  (let [checkpointed (-> (extensions/read-checkpoints log job-id)
-                         (get recover)
-                         (get [task-id slot-id checkpoint-type]))]
+  (let [checkpointed (extensions/read-checkpoint log job-id recover task-id slot-id checkpoint-type)]
     (if-not (= :beginning checkpointed)
       checkpointed)))
 
