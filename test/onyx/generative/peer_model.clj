@@ -389,6 +389,7 @@
                 (new-group peer-config group-id))))))
 
 (defn apply-event [random-drain-gen peer-config groups event]
+  (println "Event" event)
   (try
    ;(println "applying event" event)
    (if (vector? event)

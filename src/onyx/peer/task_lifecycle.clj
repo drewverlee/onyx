@@ -53,8 +53,9 @@
       (assoc accum :retries (conj! (:retries accum) root))
       (update accum :segments (fn [s] (conj! s (assoc leaf* :flow (:flow routes))))))))
 
+;; TODO REMOVE
 (s/defn add-from-leaves
-  "Flattens root/leaves into an xor'd ack-val, and accumulates new segments and retries"
+  "Flattens root/leaves and accumulates new segments and retries"
   [segments retries event :- os/Event result]
   (let [root (:root result)
         leaves (:leaves result)]
@@ -149,17 +150,18 @@
       (advance (advance state)))))
 
 (defn write-state-checkpoint! [state]
-  (let [messenger (get-messenger state)
-        event (get-event state)
-        replica-version (m/replica-version messenger)
-        epoch (m/epoch messenger)]
-    (when (:windowed-task? event) 
-      (let [{:keys [job-id task-id slot-id log]} event] 
-        (extensions/write-checkpoint log job-id replica-version epoch task-id slot-id 
+  (when (:windowed-task? (get-event state)) 
+    (let [messenger (get-messenger state)
+          event (get-event state)
+          replica-version (m/replica-version messenger)
+          epoch (m/epoch messenger)
+          {:keys [job-id task-id slot-id log]} event] 
+      (extensions/write-checkpoint log job-id replica-version epoch task-id slot-id 
                                    :state 
-                                   (mapv ws/export-state (get-windows-state state)))))))
+                                   (mapv ws/export-state (get-windows-state state)))))
+  state)
 
-(defn do-offer-barriers [state]
+(defn offer-barriers [state]
   (let [event (get-event state)
         messenger (get-messenger state)
         context (get-context state)] 
@@ -171,17 +173,12 @@
             (recur (rest pubs))
             (set-context! state (assoc context :publications pubs))))
         (do
-         (println "Unblocking for " (m/replica-version messenger) (m/epoch messenger))
+         (println "Unblocking for, windowed?" (:windowed-task? event) "rve" (m/replica-version messenger) (m/epoch messenger))
          (m/unblock-subscriptions! messenger)
          (-> state 
+             (write-state-checkpoint!)
              (set-context! nil)
              (advance)))))))
-
-(defn offer-barriers [state]
-  (let [new-state (do-offer-barriers state)]
-    (when (advanced? new-state)
-      (write-state-checkpoint! new-state))
-    new-state))
 
 (defn prepare-ack-barriers [state]
   (let [messenger (get-messenger state)] 

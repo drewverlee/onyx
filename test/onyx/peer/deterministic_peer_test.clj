@@ -365,6 +365,7 @@
 (defn run-test [{:keys [phases] :as generated}]
   (let [_ (reset! state-atom {})
         _ (reset! key-slot-tracker {})
+        [submit-phase random-phase] phases
         all-gen-cmds (apply concat phases)
         job-commands (set (filter #(= (:command %) :submit-job) all-gen-cmds)) 
         jobs (map :job-spec job-commands)
@@ -375,23 +376,23 @@
         unique-groups (set (keep :group-id (concat all-gen-cmds final-add-peer-cmds)))
         _ (assert (= 2 (count phases)))
         all-cmds (concat 
-                   (first phases)
-                   [{:type :drain-commands}]
-                   ;; Start with enough peers to finish the job, 
-                   ;; just to get a nice mix of task iterations 
-                   ;; This probably should be removed sometimes
-                   final-add-peer-cmds 
-                   ;; Ensure all the peer joining activities have finished
-                   [{:type :drain-commands}]
-                   (second phases)
-                   ;; Then add enough peers to complete the job
-                   final-add-peer-cmds 
-                   ;; Ensure they've fully joined
-                   [{:type :drain-commands}]
-                   ;; Complete the job
-                   ;; FIXME: not sure why so many iterations are required when using grouping
-                   (job-completion-cmds unique-groups jobs 4000)
-                   [{:type :drain-commands}])
+                  submit-phase
+                  [{:type :drain-commands}]
+                  ;; Start with enough peers to finish the job, 
+                  ;; just to get a nice mix of task iterations 
+                  ;; This probably should be removed sometimes
+                  final-add-peer-cmds 
+                  ;; Ensure all the peer joining activities have finished
+                  [{:type :drain-commands}]
+                  random-phase
+                  ;; Then add enough peers to complete the job
+                  final-add-peer-cmds 
+                  ;; Ensure they've fully joined
+                  [{:type :drain-commands}]
+                  ;; Complete the job
+                  ;; FIXME: not sure why so many iterations are required when using grouping
+                  (job-completion-cmds unique-groups jobs 4000)
+                  [{:type :drain-commands}])
         model (g/model-commands all-cmds)
         ;_ (println "Start run" (count gen-cmds))
         _ (assert (:media-driver-type generated))
@@ -448,21 +449,21 @@
             media-driver-type (gen/elements [:shared #_:shared-network #_:dedicated])
             n-jobs (gen/return 1) ;(gen/resize 4 gen/s-pos-int) 
             ;; Number of peers on each input task
-            initial-submit? (gen/no-shrink (gen/elements [1 0]))
+            initial-submit? (gen/no-shrink (gen/return 1) #_(gen/elements [1 0]))
             jobs (gen/no-shrink (gen/vector job-gen n-jobs))
             phases (gen/no-shrink 
                     (gen/tuple
                      (gen/vector (gen/return jobs) initial-submit?) 
                      (gen/scale #(* 50 %) ; scale to larger command sets quicker
                                 (gen/vector 
-                                 (gen/frequency [[1000 g/task-iteration-gen]
-                                                 [500 g/coordinator-barrier]
-                                                 [500 g/offer-barriers]
+                                 (gen/frequency [[2000 g/task-iteration-gen]
+                                                 [1000 g/coordinator-barrier]
+                                                 [2000 g/offer-barriers]
                                                  ;; These should be infrequent
-                                                 [5 g/add-peer-group-gen]
-                                                 [5 g/remove-peer-group-gen]
-                                                 [5 g/add-peer-gen]
-                                                 [5 g/remove-peer-gen]
+                                                 [50 g/add-peer-group-gen]
+                                                 [50 g/remove-peer-group-gen]
+                                                 [50 g/add-peer-gen]
+                                                 [50 g/remove-peer-gen]
                                                  [5 g/full-remove-peer-gen]
                                                  [5 (gen/elements jobs)]
                                                  ;; These need to be pretty likely, even though most will be no-ops
