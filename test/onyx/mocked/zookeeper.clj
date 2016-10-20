@@ -72,10 +72,11 @@
 (defmethod extensions/latest-full-checkpoint FakeZooKeeper
   [log job-id required-checkpoints] 
   (println "Checkpoints required" required-checkpoints)
-  (println "CHECKPOINTS HAS?" (get @(:checkpoints log) job-id))
+  ;(println "CHECKPOINTS HAS?" (get @(:checkpoints log) job-id))
   (->> (get @(:checkpoints log) job-id)
        (filterv (fn [[k v]]
-                  (println "CHECKIT" (set required-checkpoints) "vs" (set (keys v)))
+                  (println "CHECKIT" (set required-checkpoints) "vs" (set (keys v))
+                           (vals v))
                   (= (set required-checkpoints) (set (keys v)))))
        (sort-by key)
        last

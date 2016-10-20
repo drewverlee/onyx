@@ -87,8 +87,8 @@
   (let [new-messenger (-> messenger 
                           (transition-messenger prev-replica new-replica job-id peer-id)
                           (m/set-replica-version! (get-in new-replica [:allocation-version job-id])))
-        _ (println "REALLOCATING, TRYING TO RECOVER")
         checkpoint-version (max-completed-checkpoints log new-replica job-id)
+        _ (println "REALLOCATING, TRYING TO RECOVER" checkpoint-version)
         new-messenger (m/next-epoch! new-messenger)]
     (assoc state 
            :offering? true

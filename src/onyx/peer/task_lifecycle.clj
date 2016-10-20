@@ -101,6 +101,7 @@
   {:post [(empty? (:batch (:event %)))
           (empty? (:segments (:results (:event %))))]}
   (-> state 
+      (set-context! nil)
       (set-event! (assoc (get-event state) :lifecycle-id (uuid/random-uuid)))
       (advance)))
 
@@ -177,7 +178,6 @@
          (m/unblock-subscriptions! messenger)
          (-> state 
              (write-state-checkpoint!)
-             (set-context! nil)
              (advance)))))))
 
 (defn prepare-ack-barriers [state]
@@ -264,10 +264,11 @@
       checkpointed)))
 
 (defn recover-pipeline-input [state]
-  (let [recover (:recover (get-context state))
+  (let [{:keys [recover] :as context} (get-context state)
         pipeline (get-pipeline state)
         event (get-event state)
         stored (recover-stored-checkpoint event :input recover)
+        _ (assert recover)
         _ (info "Recovering checkpoint" (:job-id event) (:task-id event) stored)
         next-pipeline (oi/recover pipeline stored)]
     (-> state
@@ -282,6 +283,7 @@
   (let [{:keys [recover] :as context} (get-context state)
         {:keys [log-prefix task-map windows triggers] :as event} (get-event state)
         stored (recover-stored-checkpoint event :state recover)
+        _ (assert recover)
         recovered-windows (->> windows
                                (mapv (fn [window] (wc/resolve-window-state window triggers task-map)))
                                (mapv (fn [stored ws]
@@ -504,14 +506,14 @@
     (get lifecycle-names idx))
   (print-state [this]
     (let [task-map (:task-map event)] 
-      #_(println "Task state" 
+      (println "Task state" 
                [(:onyx/type task-map)
                 (:onyx/name task-map)
                 :slot
                 (:slot-id event)
                 :id
                 (:id event)
-                (get-lifecycle state)
+                (get-lifecycle this)
                 :adv? advanced
                 :rv
                 (m/replica-version messenger)

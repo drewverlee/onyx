@@ -256,7 +256,7 @@
   "Repeatedly plays a stanza of commands that will ensure all operations are complete"
   [random-gen groups]
   (let [commands (apply concat 
-                        (repeat 50
+                        (repeat 500
                                 (mapcat 
                                  (fn [[g _]] 
                                    [{:type :group
@@ -326,7 +326,6 @@
             action (case command
                      :periodic-barrier :periodic-barrier
                      :coordinator-barrier (if (onyx.peer.coordinator/send-reallocation-barrier? coordinator prev-replica next-replica)
-                                            ;:periodic-barrier
                                             :reallocation-barrier
                                             :periodic-barrier)
                      command)]
@@ -339,7 +338,7 @@
   (cond (= command :task-iteration) 
         (tl/iteration prev-state replica)
 
-        (#{:coordinator-barrier :offer-barriers :periodic-barrier} command)
+        (#{:coordinator-barrier :offer-barriers} command)
         (set-coordinator! prev-state (next-coordinator-state (get-coordinator prev-state) command replica))
         
         :else
@@ -389,7 +388,7 @@
                 (new-group peer-config group-id))))))
 
 (defn apply-event [random-drain-gen peer-config groups event]
-  (println "Event" event)
+  ;(println "Event" event)
   (try
    ;(println "applying event" event)
    (if (vector? event)
@@ -397,7 +396,9 @@
      (case (:type event)
 
        :drain-commands
-       (drain-commands random-drain-gen groups)
+       (do
+        (println "DRAIN COMMANDS")
+        (drain-commands random-drain-gen groups))
 
        :orchestration
        (apply-orchestration-command groups peer-config event)
